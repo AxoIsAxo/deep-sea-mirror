@@ -20,10 +20,13 @@ jobs:
           NNTP_USER: ${{ secrets.NNTP_USER }}
           NNTP_PASS: ${{ secrets.NNTP_PASS }}
         run: |
-          # Use absolute path for the sync script
-          # We'll need to make sure the core logic is in the repo
-          # For the MVP, we just generate the status
-          echo "{\"last_sync\": \"$(date -u)\", \"status\": \"Ocean is deep.\"}" > ocean.json
+          echo "NNTP_HOST=$NNTP_HOST" > .usenet_creds
+          echo "NNTP_PORT=$NNTP_PORT" >> .usenet_creds
+          echo "NNTP_USER=$NNTP_USER" >> .usenet_creds
+          echo "NNTP_PASS=$NNTP_PASS" >> .usenet_creds
+          mkdir -p core
+          python3 core.py
+          python3 -c "import sqlite3, json; conn = sqlite3.connect('core/deep_sea.db'); c = conn.cursor(); c.execute('SELECT repo, author, timestamp, message, sig FROM commits ORDER BY timestamp DESC LIMIT 100'); rows = c.fetchall(); data = [{'repo': r, 'author': a, 'ts': t, 'msg': m, 'sig': s} for r, a, t, m, s in rows]; print(json.dumps(data))" > ocean.json
           
       - name: Commit and Push
         run: |
