@@ -85,9 +85,17 @@
                 <label>Admin Secret</label>
                 <input type="password" id="loginSecret" placeholder="Master Secret">
             </div>
-            <div style="text-align:left; margin-bottom:20px;">
-                <input type="checkbox" id="rememberMe" style="width:auto; margin-right:8px;">
-                <label style="display:inline;" for="rememberMe">Remember me</label>
+            <div id="nodeSettings" style="display:none; border:1px dashed var(--border); padding:10px; margin-bottom:15px; border-radius:6px; background:rgba(0,0,0,0.2);">
+                <label>Remote Node Address</label>
+                <input type="text" id="customNodeAddr" placeholder="http://100.110.212.33:9999">
+                <p style="font-size:0.6rem; color:var(--muted); margin-top:5px;">Required for Static Mirror (Admin).</p>
+            </div>
+            <div style="text-align:left; margin-bottom:20px; display:flex; justify-content:space-between;">
+                <div>
+                    <input type="checkbox" id="rememberMe" style="width:auto; margin-right:8px;">
+                    <label style="display:inline;" for="rememberMe">Remember me</label>
+                </div>
+                <a href="#" onclick="toggleNodeSettings()" style="font-size:0.7rem; color:var(--muted); text-decoration:none;">Node Settings</a>
             </div>
             <button class="btn" onclick="login()" style="width:100%; padding:12px; margin-top:10px;">Login to Ocean</button>
             <p id="loginError" style="color:var(--danger); font-size:0.75rem; margin-top:15px; display:none;"></p>
@@ -179,6 +187,11 @@
         }
         updateFavicon();
 
+        function toggleNodeSettings() {
+            const div = document.getElementById('nodeSettings');
+            div.style.display = div.style.display === 'none' ? 'block' : 'none';
+        }
+
         window.onload = () => {
             const saved = localStorage.getItem('deep_sea_admin_creds');
             if (saved) {
@@ -187,45 +200,59 @@
                 document.getElementById('loginSecret').value = creds.secret;
                 document.getElementById('rememberMe').checked = true;
             }
+            const addr = localStorage.getItem('deep_sea_admin_node_addr');
+            if (addr) document.getElementById('customNodeAddr').value = addr;
         };
 
         async function login() {
             const keyId = document.getElementById('loginKey').value;
             const secret = document.getElementById('loginSecret').value;
             const remember = document.getElementById('rememberMe').checked;
+            const customAddr = document.getElementById('customNodeAddr').value;
             const error = document.getElementById('loginError');
 
             if (!keyId || !secret) return;
 
-            const resp = await fetch('/api/gateway/verify', {
-                headers: { 'X-DeepSea-Key': keyId }
-            });
+            if (customAddr) localStorage.setItem('deep_sea_admin_node_addr', customAddr);
+            else localStorage.removeItem('deep_sea_admin_node_addr');
 
-            if (resp.ok) {
-                const data = await resp.json();
-                // Check if this is YOUR specific primary key
-                if (keyId !== 'ds_key_ed5b7f253140') {
-                    error.innerText = "Access Denied: Not an Admin Key.";
+            const apiBase = customAddr ? customAddr.replace(/\/$/, '') : '';
+            
+            try {
+                const resp = await fetch(apiBase + '/api/gateway/verify', {
+                    headers: { 'X-DeepSea-Key': keyId }
+                });
+
+                if (resp.ok) {
+                    const data = await resp.json();
+                    if (keyId !== 'ds_key_ed5b7f253140') {
+                        error.innerText = "Access Denied: Not an Admin Key.";
+                        error.style.display = 'block';
+                        return;
+                    }
+                    session = { key: keyId, secret: secret };
+                    if (remember) localStorage.setItem('deep_sea_admin_creds', JSON.stringify(session));
+                    else localStorage.removeItem('deep_sea_admin_creds');
+                    
+                    document.getElementById('loginOverlay').style.display = 'none';
+                    document.getElementById('dashboard').style.display = 'block';
+                    syncRepos();
+                } else {
+                    error.innerText = "Invalid Key ID.";
                     error.style.display = 'block';
-                    return;
                 }
-                session = { key: keyId, secret: secret };
-                if (remember) localStorage.setItem('deep_sea_admin_creds', JSON.stringify(session));
-                else localStorage.removeItem('deep_sea_admin_creds');
-                
-                document.getElementById('loginOverlay').style.display = 'none';
-                document.getElementById('dashboard').style.display = 'block';
-                syncRepos();
-            } else {
-                error.innerText = "Invalid Key ID.";
+            } catch(e) {
+                error.innerText = "Node Offline. Check settings.";
                 error.style.display = 'block';
             }
         }
 
         async function syncRepos() {
             const status = document.getElementById('status'); status.innerText = "Diving into the currents...";
+            const savedAddr = localStorage.getItem('deep_sea_admin_node_addr');
+            const apiBase = savedAddr ? savedAddr.replace(/\/$/, '') : '';
             try {
-                const resp = await fetch('/api/commits');
+                const resp = await fetch(apiBase + '/api/commits');
                 const commits = await resp.json();
                 const container = document.getElementById('repos'); container.innerHTML = '';
                 const projects = {};
@@ -241,7 +268,7 @@
                     container.appendChild(div);
                 });
                 status.innerText = `Full Ocean: Found ${Object.keys(projects).length} repositories.`;
-            } catch (e) { status.innerText = "❌ Error syncing."; }
+            } catch (e) { status.innerText = "❌ Sync Error. Node offline?"; }
         }
 
         async function editRepo(name) {
@@ -251,24 +278,11 @@
             document.getElementById('fileBrowser').innerHTML = 'Loading...';
             document.getElementById('editorArea').value = "";
             
-            try {
-                // Admin uses standard node API, not gateway
-                // We'll use a hack: admin dashboard can use the gateway files API without a key check on localhost
-                // For now, let's just fetch commits and extract latest packet
-                const resp = await fetch('/api/commits');
-                const all = await resp.json();
-                // This is a bit slow for admin, but ensures consistency
-                // In v1.1 we should add /api/files directly
-                const commits = await fetch('/api/gateway/repos', { headers: { 'X-DeepSea-Key': 'ADMIN' } });
-                // Note: Node.py currently blocks /api/gateway/repos without a real key.
-                // Fixing this in Node.py now.
-            } catch (e) { }
-            
-            // Temporary Fallback: Use the gateway API with your existing key for the demo
-            // Real fix is in node.py
+            const savedAddr = localStorage.getItem('deep_sea_admin_node_addr');
+            const apiBase = savedAddr ? savedAddr.replace(/\/$/, '') : '';
             const key = "ds_key_ed5b7f253140"; 
             try {
-                const resp = await fetch('/api/gateway/files', { headers: { 'X-DeepSea-Key': key, 'X-DeepSea-Repo': name } });
+                const resp = await fetch(apiBase + '/api/gateway/files', { headers: { 'X-DeepSea-Key': key, 'X-DeepSea-Repo': name } });
                 currentRepoFiles = await resp.json();
                 renderFileBrowser();
                 const sorted = Object.keys(currentRepoFiles).sort();
