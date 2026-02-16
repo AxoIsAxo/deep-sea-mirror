@@ -72,12 +72,12 @@
         .menu-divider { border-top: 1px solid var(--border); margin: 5px 0; }
     </style>
 </head>
-<body oncontextmenu="return false;">
+<body oncontextmenu="return false;" onclick="closeContextMenu()">
     <div id="contextMenu">
-        <div class="menu-item" onclick="renameFilePrompt()">Rename File</div>
-        <div class="menu-item" onclick="deleteFileCurrent()" style="color:var(--danger);">Delete File</div>
+        <div class="menu-item" onmousedown="renameFilePrompt()">Rename File</div>
+        <div class="menu-item" onmousedown="deleteFileCurrent()" style="color:var(--danger);">Delete File</div>
         <div class="menu-divider"></div>
-        <div class="menu-item" onclick="showBrowserMenu()">Browser Menu</div>
+        <div class="menu-item" onmousedown="showBrowserMenu()">Browser Menu</div>
     </div>
 
     <div id="loginOverlay">
@@ -350,9 +350,20 @@
             document.querySelectorAll('.file-item').forEach(el => el.classList.toggle('active', el.innerText === path));
         }
 
-        function showContextMenu(e, path) { contextFile = path; const menu = document.getElementById('contextMenu'); menu.style.display = 'block'; menu.style.left = e.pageX + 'px'; menu.style.top = e.pageY + 'px'; }
-        window.onclick = () => document.getElementById('contextMenu').style.display = 'none';
-        function showBrowserMenu() { alert("Use Shift + Right Click."); }
+        function showContextMenu(e, path) {
+            contextFile = path;
+            const menu = document.getElementById('contextMenu');
+            menu.style.display = 'block';
+            menu.style.left = e.pageX + 'px';
+            menu.style.top = e.pageY + 'px';
+            e.stopPropagation();
+        }
+
+        function closeContextMenu() {
+            document.getElementById('contextMenu').style.display = 'none';
+        }
+
+        function showBrowserMenu() {
 
         function addFile() { const name = prompt("Filename:"); if (!name) return; currentRepoFiles[name] = utob("# " + name); renderFileBrowser(); selectFile(name); }
         function renameFilePrompt() { const newName = prompt("Rename to:", contextFile); if (!newName) return; currentRepoFiles[newName] = currentRepoFiles[contextFile]; delete currentRepoFiles[contextFile]; renderFileBrowser(); selectFile(newName); }
