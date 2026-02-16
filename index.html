@@ -27,7 +27,22 @@
         .btn-muted { background: var(--border); color: var(--text); }
         .btn-danger { background: var(--danger); }
 
-        main { flex: 1; padding: 30px 40px; overflow-y: auto; }
+        main { flex: 1; padding: 30px 40px; overflow-y: auto; display: none; }
+        #loginOverlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: var(--bg); display: flex; align-items: center; justify-content: center; z-index: 2000;
+        }
+        .login-card {
+            background: var(--surface); border: 1px solid var(--border);
+            padding: 40px; border-radius: 8px; width: 350px; text-align: center;
+        }
+        .input-group { margin-bottom: 15px; text-align: left; }
+        label { display: block; font-size: 0.75rem; color: var(--muted); margin-bottom: 5px; }
+        input {
+            width: 100%; background: var(--bg); border: 1px solid var(--border);
+            color: var(--text); padding: 10px; border-radius: 6px; box-sizing: border-box;
+        }
+
         .repo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 20px; }
         .repo-card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 20px; position: relative; }
         .repo-name { font-weight: bold; font-size: 1.1rem; color: var(--accent); margin-bottom: 5px; }
@@ -58,6 +73,27 @@
     </style>
 </head>
 <body oncontextmenu="return false;">
+    <div id="loginOverlay">
+        <div class="login-card">
+            <h2 style="margin-top:0;">🌊 Deep Sea Admin</h2>
+            <p style="font-size:0.8rem; color:var(--muted); margin-bottom:25px;">Master credentials required.</p>
+            <div class="input-group">
+                <label>Admin Key ID</label>
+                <input type="text" id="loginKey" placeholder="ds_key_...">
+            </div>
+            <div class="input-group">
+                <label>Admin Secret</label>
+                <input type="password" id="loginSecret" placeholder="Master Secret">
+            </div>
+            <div style="text-align:left; margin-bottom:20px;">
+                <input type="checkbox" id="rememberMe" style="width:auto; margin-right:8px;">
+                <label style="display:inline;" for="rememberMe">Remember me</label>
+            </div>
+            <button class="btn" onclick="login()" style="width:100%; padding:12px; margin-top:10px;">Login to Ocean</button>
+            <p id="loginError" style="color:var(--danger); font-size:0.75rem; margin-top:15px; display:none;"></p>
+        </div>
+    </div>
+
     <div id="contextMenu">
         <div class="menu-item" onclick="renameFilePrompt()">Rename File</div>
         <div class="menu-item" onclick="deleteFileCurrent()" style="color:var(--danger);">Delete File</div>
@@ -130,6 +166,7 @@
         let currentRepoFiles = {};
         let currentActiveFile = '';
         let contextFile = '';
+        let session = { key: '', secret: '' };
 
         function utob(str) { return window.btoa(unescape(encodeURIComponent(str))); }
         function btou(str) { try { return decodeURIComponent(escape(window.atob(str))); } catch(e) { return window.atob(str); } }
@@ -141,6 +178,49 @@
             const link = document.createElement('link'); link.rel = 'icon'; link.href = canvas.toDataURL('image/x-icon'); document.head.appendChild(link);
         }
         updateFavicon();
+
+        window.onload = () => {
+            const saved = localStorage.getItem('deep_sea_admin_creds');
+            if (saved) {
+                const creds = JSON.parse(saved);
+                document.getElementById('loginKey').value = creds.key;
+                document.getElementById('loginSecret').value = creds.secret;
+                document.getElementById('rememberMe').checked = true;
+            }
+        };
+
+        async function login() {
+            const keyId = document.getElementById('loginKey').value;
+            const secret = document.getElementById('loginSecret').value;
+            const remember = document.getElementById('rememberMe').checked;
+            const error = document.getElementById('loginError');
+
+            if (!keyId || !secret) return;
+
+            const resp = await fetch('/api/gateway/verify', {
+                headers: { 'X-DeepSea-Key': keyId }
+            });
+
+            if (resp.ok) {
+                const data = await resp.json();
+                // Check if this is YOUR specific primary key
+                if (keyId !== 'ds_key_ed5b7f253140') {
+                    error.innerText = "Access Denied: Not an Admin Key.";
+                    error.style.display = 'block';
+                    return;
+                }
+                session = { key: keyId, secret: secret };
+                if (remember) localStorage.setItem('deep_sea_admin_creds', JSON.stringify(session));
+                else localStorage.removeItem('deep_sea_admin_creds');
+                
+                document.getElementById('loginOverlay').style.display = 'none';
+                document.getElementById('dashboard').style.display = 'block';
+                syncRepos();
+            } else {
+                error.innerText = "Invalid Key ID.";
+                error.style.display = 'block';
+            }
+        }
 
         async function syncRepos() {
             const status = document.getElementById('status'); status.innerText = "Diving into the currents...";
