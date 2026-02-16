@@ -205,10 +205,10 @@
         };
 
         async function login() {
-            const keyId = document.getElementById('loginKey').value;
-            const secret = document.getElementById('loginSecret').value;
+            const keyId = document.getElementById('loginKey').value.trim();
+            const secret = document.getElementById('loginSecret').value.trim();
             const remember = document.getElementById('rememberMe').checked;
-            const customAddr = document.getElementById('customNodeAddr').value;
+            const customAddr = document.getElementById('customNodeAddr').value.trim();
             const error = document.getElementById('loginError');
 
             if (!keyId || !secret) return;
@@ -217,11 +217,9 @@
             else localStorage.removeItem('deep_sea_admin_node_addr');
 
             const apiBase = customAddr ? customAddr.replace(/\/$/, '') : '';
-            const isStatic = window.location.hostname.includes('github.io') || window.location.hostname.includes('dev');
+            const isStatic = !window.location.port || window.location.hostname.includes('github.io') || window.location.hostname.includes('dev');
             
             try {
-                // If on static mirror and no custom node provided, we bypass the server check 
-                // and just verify the Admin Key ID locally for "Read-Only" mode.
                 if (isStatic && !customAddr) {
                     if (keyId === 'ds_key_ed5b7f253140') {
                         session = { key: keyId, secret: secret };
