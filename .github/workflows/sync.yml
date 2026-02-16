@@ -1,0 +1,34 @@
+name: Ocean Sync
+on:
+  schedule:
+    - cron: '0 * * * *' # Hourly
+  workflow_dispatch: # Manual trigger
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Sync Ocean Data
+        env:
+          NNTP_HOST: ${{ secrets.NNTP_HOST }}
+          NNTP_PORT: ${{ secrets.NNTP_PORT }}
+          NNTP_USER: ${{ secrets.NNTP_USER }}
+          NNTP_PASS: ${{ secrets.NNTP_PASS }}
+        run: |
+          # Use absolute path for the sync script
+          # We'll need to make sure the core logic is in the repo
+          # For the MVP, we just generate the status
+          echo "{\"last_sync\": \"$(date -u)\", \"status\": \"Ocean is deep.\"}" > ocean.json
+          
+      - name: Commit and Push
+        run: |
+          git config --global user.name "Deep Sea Diver"
+          git config --global user.email "diver@deepsea.network"
+          git add ocean.json
+          git commit -m "Ocean Sync: $(date -u)" || echo "No changes"
+          git push

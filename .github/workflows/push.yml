@@ -1,0 +1,25 @@
+name: Ocean Push
+on:
+  repository_dispatch:
+    types: [managed-push]
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Broadcast to Usenet
+        env:
+          NNTP_HOST: ${{ secrets.NNTP_HOST }}
+          NNTP_PORT: ${{ secrets.NNTP_PORT }}
+          NNTP_USER: ${{ secrets.NNTP_USER }}
+          NNTP_PASS: ${{ secrets.NNTP_PASS }}
+          PACKET: ${{ github.event.client_payload.packet }}
+        run: |
+          echo "$PACKET" > packet.json
+          # Run the push logic here
+          echo "Pushing signed packet to ${NNTP_HOST}..."
