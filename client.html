@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deep Sea | Client Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <style>
+        :root {
+            --bg: #0a0b10;
+            --surface: #161b22;
+            --accent: #58a6ff;
+            --success: #238636;
+            --danger: #da3633;
+            --text: #c9d1d9;
+            --muted: #8b949e;
+            --border: #30363d;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            background: var(--bg); color: var(--text); margin: 0; padding: 0;
+            display: flex; flex-direction: column; height: 100vh;
+        }
+        header { padding: 15px 40px; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+        h1 { margin: 0; font-size: 1.1rem; display: flex; align-items: center; gap: 10px; }
+        .btn { background: var(--success); color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.85rem; }
+        .btn:hover { filter: brightness(1.1); }
+        .btn-muted { background: var(--border); color: var(--text); }
+        .btn-danger { background: var(--danger); }
+
+        main { flex: 1; padding: 30px 40px; overflow-y: auto; display: none; }
+        #loginOverlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg); display: flex; align-items: center; justify-content: center; z-index: 2000; }
+        .login-card { background: var(--surface); border: 1px solid var(--border); padding: 40px; border-radius: 8px; width: 350px; text-align: center; }
+        .input-group { margin-bottom: 15px; text-align: left; }
+        label { display: block; font-size: 0.75rem; color: var(--muted); margin-bottom: 5px; }
+        input, textarea { width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 10px; border-radius: 6px; box-sizing: border-box; font-family: inherit; }
+
+        .repo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 20px; }
+        .repo-card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 20px; position: relative; }
+        .repo-name { font-weight: bold; font-size: 1.1rem; color: var(--accent); margin-bottom: 5px; }
+        .repo-meta { font-size: 0.75rem; color: var(--muted); margin-bottom: 15px; }
+        .repo-actions { display: flex; gap: 10px; margin-top: 15px; border-top: 1px solid var(--border); padding-top: 15px; }
+        
+        #status { font-size: 0.8rem; color: var(--accent); margin-bottom: 20px; }
+
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); align-items: center; justify-content: center; z-index: 1000; }
+        .modal-content { background: var(--surface); border: 1px solid var(--border); padding: 30px; border-radius: 8px; width: 800px; max-width: 90%; height: 80vh; display: flex; flex-direction: column; }
+        
+        .editor-container { display: flex; flex: 1; overflow: hidden; border: 1px solid var(--border); border-radius: 6px; margin-top: 10px; }
+        .file-browser { width: 200px; background: var(--bg); border-right: 1px solid var(--border); overflow-y: auto; padding: 10px; }
+        .file-item { padding: 5px 10px; font-size: 0.85rem; cursor: pointer; border-radius: 4px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .file-item:hover { background: var(--surface); color: var(--text); }
+        .file-item.active { background: var(--surface); color: var(--accent); font-weight: bold; }
+        .editor-main { flex: 1; display: flex; flex-direction: column; }
+        #editorArea { flex: 1; font-family: monospace; border: none; padding: 15px; outline: none; background: transparent; color: var(--text); resize: none; }
+
+        #contextMenu {
+            display: none; position: fixed; background: var(--surface); border: 1px solid var(--border);
+            border-radius: 6px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); z-index: 3000; min-width: 150px;
+            padding: 5px 0;
+        }
+        .menu-item { padding: 8px 15px; font-size: 0.85rem; color: var(--text); cursor: pointer; }
+        .menu-item:hover { background: var(--accent); color: white; }
+        .menu-divider { border-top: 1px solid var(--border); margin: 5px 0; }
+    </style>
+</head>
+<body oncontextmenu="return false;">
+    <div id="contextMenu">
+        <div class="menu-item" onclick="renameFilePrompt()">Rename File</div>
+        <div class="menu-item" onclick="deleteFileCurrent()" style="color:var(--danger);">Delete File</div>
+        <div class="menu-divider"></div>
+        <div class="menu-item" onclick="showBrowserMenu()">Browser Menu</div>
+    </div>
+
+    <div id="loginOverlay">
+        <div class="login-card">
+            <h2 style="margin-top:0;">🌊 Deep Sea Login</h2>
+            <div class="input-group">
+                <label>Key ID</label>
+                <input type="text" id="loginKey" placeholder="ds_key_...">
+            </div>
+            <div class="input-group">
+                <label>Secret</label>
+                <input type="password" id="loginSecret" placeholder="Your API Secret">
+            </div>
+            <div style="text-align:left; margin-bottom:20px;">
+                <input type="checkbox" id="rememberMe" style="width:auto; margin-right:8px;">
+                <label style="display:inline;" for="rememberMe">Remember me</label>
+            </div>
+            <button class="btn" onclick="login()" style="width:100%; padding:12px;">Connect to Node</button>
+            <p id="loginError" style="color:var(--danger); font-size:0.75rem; margin-top:15px; display:none;"></p>
+        </div>
+    </div>
+
+    <header>
+        <h1>🌊 Deep Sea <small style="color:var(--muted); font-weight:normal;" id="clientName">Client Node</small></h1>
+        <div style="display:flex; gap:10px;">
+            <button class="btn btn-muted" onclick="syncRepos()">Sync My Repos</button>
+            <button class="btn" onclick="showPushModal()">New Push</button>
+            <button class="btn btn-muted" onclick="logout()">Logout</button>
+        </div>
+    </header>
+
+    <main id="dashboard">
+        <div id="status">Ready.</div>
+        <div id="repos" class="repo-grid"></div>
+    </main>
+
+    <div id="editorModal" class="modal">
+        <div class="modal-content">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                <h2 id="editorTitle" style="margin:0;">Edit Project</h2>
+                <div style="display:flex; gap:10px; align-items:center;">
+                    <input type="text" id="editorMsg" placeholder="Commit message" style="width:250px; padding:6px 10px; font-size:0.8rem;">
+                    <button class="btn" onclick="saveFiles()" id="saveBtn">Push Update</button>
+                    <button class="btn btn-muted" onclick="closeModals()">Close</button>
+                </div>
+            </div>
+            <div class="editor-container">
+                <div class="file-browser">
+                    <div style="padding:10px; display:flex; gap:5px; border-bottom:1px solid var(--border);">
+                        <button class="btn" style="flex:1; padding:4px; font-size:0.7rem;" onclick="addFile()">+ New File</button>
+                    </div>
+                    <div id="fileBrowser"></div>
+                </div>
+                <div class="editor-main">
+                    <div id="activeFileName" style="padding:5px 15px; font-size:0.75rem; color:var(--muted); background:var(--surface); border-bottom:1px solid var(--border);">No file selected</div>
+                    <textarea id="editorArea" spellcheck="false"></textarea>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="renameModal" class="modal">
+        <div class="modal-content" style="height:auto;">
+            <h2 style="margin-top:0;">Rename Repository</h2>
+            <div class="input-group">
+                <label>New Name</label>
+                <input type="text" id="newName" placeholder="new-project-name">
+            </div>
+            <input type="hidden" id="oldName">
+            <div class="repo-actions">
+                <button class="btn" onclick="performRename()" style="flex:1;">Rename</button>
+                <button class="btn btn-muted" onclick="closeModals()" style="flex:1;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="pushModal" class="modal">
+        <div class="modal-content" style="height:auto;">
+            <h2 style="margin-top:0;">Managed Push</h2>
+            <div class="input-group"><label>Repo Name</label><input type="text" id="pushRepoName" placeholder="my-new-project"></div>
+            <div class="input-group"><label>Initial Message</label><input type="text" id="pushMsg" placeholder="First commit"></div>
+            <div class="repo-actions">
+                <button class="btn" onclick="performPush()" style="flex:1;">Create & Push</button>
+                <button class="btn btn-muted" onclick="closeModals()" style="flex:1;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let session = { key: '', secret: '' };
+        let currentEditingRepo = '';
+        let currentRepoFiles = {};
+        let currentActiveFile = '';
+        let contextFile = '';
+
+        // Helper for Unicode Safe Base64
+        function utob(str) { return window.btoa(unescape(encodeURIComponent(str))); }
+        function btou(str) { try { return decodeURIComponent(escape(window.atob(str))); } catch(e) { return window.atob(str); } }
+
+        function updateFavicon() {
+            const canvas = document.createElement('canvas'); canvas.width = 32; canvas.height = 32;
+            const ctx = canvas.getContext('2d'); ctx.fillStyle = '#0a0b10'; ctx.beginPath(); ctx.arc(16, 16, 16, 0, 2 * Math.PI); ctx.fill();
+            ctx.fillStyle = '#58a6ff'; ctx.font = 'bold 20px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('🌊', 16, 17);
+            const link = document.createElement('link'); link.rel = 'icon'; link.href = canvas.toDataURL('image/x-icon'); document.head.appendChild(link);
+        }
+        updateFavicon();
+
+        window.onload = () => {
+            const saved = localStorage.getItem('deep_sea_creds');
+            if (saved) {
+                const creds = JSON.parse(saved);
+                document.getElementById('loginKey').value = creds.key;
+                document.getElementById('loginSecret').value = creds.secret;
+                document.getElementById('rememberMe').checked = true;
+            }
+        };
+
+        async function login() {
+            const keyId = document.getElementById('loginKey').value;
+            const secret = document.getElementById('loginSecret').value;
+            const remember = document.getElementById('rememberMe').checked;
+            const error = document.getElementById('loginError');
+            if (!keyId || !secret) return;
+            const resp = await fetch('/api/gateway/verify', { headers: { 'X-DeepSea-Key': keyId } });
+            if (resp.ok) {
+                const data = await resp.json();
+                session = { key: keyId, secret: secret };
+                if (remember) localStorage.setItem('deep_sea_creds', JSON.stringify(session));
+                else localStorage.removeItem('deep_sea_creds');
+                document.getElementById('loginOverlay').style.display = 'none';
+                document.getElementById('dashboard').style.display = 'block';
+                document.getElementById('clientName').innerText = `| ${data.owner}`;
+                syncRepos();
+            } else { error.innerText = "Access Denied."; error.style.display = 'block'; }
+        }
+
+        function logout() { session = { key: '', secret: '' }; document.getElementById('loginOverlay').style.display = 'flex'; document.getElementById('dashboard').style.display = 'none'; }
+
+        async function syncRepos() {
+            const status = document.getElementById('status'); status.innerText = "Diving into the currents...";
+            try {
+                const resp = await fetch('/api/gateway/repos', { headers: { 'X-DeepSea-Key': session.key } });
+                const commits = await resp.json();
+                const container = document.getElementById('repos'); container.innerHTML = '';
+                const projects = {};
+                commits.forEach(c => { if (!projects[c.repo]) projects[c.repo] = []; projects[c.repo].push(c); });
+                Object.keys(projects).forEach(name => {
+                    const latest = projects[name][0];
+                    const div = document.createElement('div'); div.className = 'repo-card';
+                    div.innerHTML = `<div class="repo-name">${name}</div><div class="repo-meta">Latest: ${latest.msg}</div><div class="repo-actions">
+                        <button class="btn" onclick="editRepo('${name}')">Browse Files</button>
+                        <button class="btn btn-muted" onclick="showRenameModal('${name}')">Rename</button>
+                        <button class="btn btn-danger" onclick="deleteRepo('${name}')">Delete</button>
+                    </div>`;
+                    container.appendChild(div);
+                });
+                status.innerText = `Found ${Object.keys(projects).length} repositories.`;
+            } catch (e) { status.innerText = "❌ Error syncing."; }
+        }
+
+        async function editRepo(name) {
+            currentEditingRepo = name;
+            document.getElementById('editorTitle').innerText = name;
+            document.getElementById('editorModal').style.display = 'flex';
+            document.getElementById('fileBrowser').innerHTML = 'Loading...';
+            document.getElementById('editorArea').value = "";
+            document.getElementById('activeFileName').innerText = "Select a file";
+            try {
+                const resp = await fetch('/api/gateway/files', { headers: { 'X-DeepSea-Key': session.key, 'X-DeepSea-Repo': name } });
+                currentRepoFiles = await resp.json();
+                renderFileBrowser();
+                const sorted = Object.keys(currentRepoFiles).sort();
+                if (sorted.length > 0) selectFile(sorted.find(f => f.toLowerCase().includes('readme')) || sorted[0]);
+            } catch (e) { document.getElementById('fileBrowser').innerHTML = "Error."; }
+        }
+
+        function renderFileBrowser() {
+            const browser = document.getElementById('fileBrowser'); browser.innerHTML = '';
+            Object.keys(currentRepoFiles).sort().forEach(path => {
+                const div = document.createElement('div'); div.className = 'file-item'; div.innerText = path;
+                div.onclick = () => selectFile(path);
+                div.oncontextmenu = (e) => { e.preventDefault(); showContextMenu(e, path); };
+                browser.appendChild(div);
+            });
+        }
+
+        function selectFile(path) {
+            if (currentActiveFile && currentRepoFiles[currentActiveFile]) currentRepoFiles[currentActiveFile] = utob(document.getElementById('editorArea').value);
+            currentActiveFile = path;
+            document.getElementById('activeFileName').innerText = path;
+            document.getElementById('editorArea').value = btou(currentRepoFiles[path]);
+            document.querySelectorAll('.file-item').forEach(el => el.classList.toggle('active', el.innerText === path));
+        }
+
+        function showContextMenu(e, path) { contextFile = path; const menu = document.getElementById('contextMenu'); menu.style.display = 'block'; menu.style.left = e.pageX + 'px'; menu.style.top = e.pageY + 'px'; }
+        window.onclick = () => document.getElementById('contextMenu').style.display = 'none';
+        function showBrowserMenu() { alert("Use Shift + Right Click for browser menu."); }
+
+        function addFile() { const name = prompt("Filename:"); if (!name) return; if (currentRepoFiles[name]) return alert("Exists."); currentRepoFiles[name] = utob("# " + name); renderFileBrowser(); selectFile(name); }
+        function renameFilePrompt() { const newName = prompt("Rename to:", contextFile); if (!newName || newName === contextFile) return; currentRepoFiles[newName] = currentRepoFiles[contextFile]; delete currentRepoFiles[contextFile]; if (currentActiveFile === contextFile) currentActiveFile = newName; renderFileBrowser(); selectFile(newName); }
+        function deleteFileCurrent() { if (!confirm("Delete " + contextFile + "?")) return; delete currentRepoFiles[contextFile]; if (currentActiveFile === contextFile) { currentActiveFile = ''; document.getElementById('editorArea').value = ''; } renderFileBrowser(); }
+
+        async function saveFiles() {
+            const msg = document.getElementById('editorMsg').value;
+            if (!msg) return alert("Describe your changes.");
+            if (currentActiveFile) currentRepoFiles[currentActiveFile] = utob(document.getElementById('editorArea').value);
+            const packet = { v: "0.2.0", type: "commit", repo: currentEditingRepo, msg: msg, ts: new Date().toISOString(), author: "Client", files: currentRepoFiles, sig: "client-sig" };
+            const payload = JSON.stringify(packet);
+            const signature = CryptoJS.HmacSHA256(payload, session.secret).toString();
+            const btn = document.getElementById('saveBtn'); btn.disabled = true; btn.innerText = "Pushing...";
+            try {
+                const resp = await fetch('/api/gateway/push', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-DeepSea-Key': session.key, 'X-DeepSea-Signature': signature }, body: payload });
+                if (resp.ok) { closeModals(); syncRepos(); } else { alert("Push failed."); }
+            } catch (e) { alert("Network error."); } finally { btn.disabled = false; btn.innerText = "Push Update"; }
+        }
+
+        function showPushModal() { document.getElementById('pushModal').style.display = 'flex'; }
+        function showRenameModal(name) { document.getElementById('oldName').value = name; document.getElementById('newName').value = name; document.getElementById('renameModal').style.display = 'flex'; }
+        function closeModals() { document.querySelectorAll('.modal').forEach(m => m.style.display = 'none'); }
+
+        async function performPush() {
+            const name = document.getElementById('pushRepoName').value;
+            const msg = document.getElementById('pushMsg').value;
+            if(!name || !msg) return;
+            const packet = { v: "0.2.0", type: "commit", repo: name, msg: msg, ts: new Date().toISOString(), author: "Client", files: {"README.md": utob("# " + name)}, sig: "client-sig" };
+            const payload = JSON.stringify(packet);
+            const signature = CryptoJS.HmacSHA256(payload, session.secret).toString();
+            const resp = await fetch('/api/gateway/push', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-DeepSea-Key': session.key, 'X-DeepSea-Signature': signature }, body: payload });
+            if (resp.ok) { closeModals(); syncRepos(); } else { alert("Push failed."); }
+        }
+
+        async function performRename() {
+            const old_name = document.getElementById('oldName').value;
+            const new_name = document.getElementById('newName').value;
+            const resp = await fetch('/api/gateway/rename', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-DeepSea-Key': session.key }, body: JSON.stringify({ old_name, new_name }) });
+            if (resp.ok) { closeModals(); syncRepos(); } else { alert("Rename failed."); }
+        }
+
+        async function deleteRepo(name) {
+            if (!confirm(`Are you sure?`)) return;
+            const resp = await fetch('/api/gateway/delete', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-DeepSea-Key': session.key }, body: JSON.stringify({ repo: name }) });
+            if (resp.ok) syncRepos();
+        }
+    </script>
+</body>
+</html>
