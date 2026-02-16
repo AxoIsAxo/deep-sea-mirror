@@ -73,6 +73,13 @@
     </style>
 </head>
 <body oncontextmenu="return false;">
+    <div id="contextMenu">
+        <div class="menu-item" onclick="renameFilePrompt()">Rename File</div>
+        <div class="menu-item" onclick="deleteFileCurrent()" style="color:var(--danger);">Delete File</div>
+        <div class="menu-divider"></div>
+        <div class="menu-item" onclick="showBrowserMenu()">Browser Menu</div>
+    </div>
+
     <div id="loginOverlay">
         <div class="login-card">
             <h2 style="margin-top:0;">🌊 Deep Sea Admin</h2>
@@ -100,13 +107,6 @@
             <button class="btn" onclick="login()" style="width:100%; padding:12px; margin-top:10px;">Login to Ocean</button>
             <p id="loginError" style="color:var(--danger); font-size:0.75rem; margin-top:15px; display:none;"></p>
         </div>
-    </div>
-
-    <div id="contextMenu">
-        <div class="menu-item" onclick="renameFilePrompt()">Rename File</div>
-        <div class="menu-item" onclick="deleteFileCurrent()" style="color:var(--danger);">Delete File</div>
-        <div class="menu-divider"></div>
-        <div class="menu-item" onclick="showBrowserMenu()">Browser Menu</div>
     </div>
 
     <header>
@@ -150,7 +150,21 @@
 
     <!-- Push Modal -->
     <div id="pushModal" class="modal">
-        <!-- ... existing push modal ... -->
+        <div class="modal-content" style="height:auto; width:400px;">
+            <h2 style="margin-top:0;">Deep Sea Push</h2>
+            <div style="margin-bottom:15px;">
+                <label style="display:block; font-size:0.75rem; color:var(--muted); margin-bottom:5px;">Repo Name (inside deep_sea/repos/)</label>
+                <input type="text" id="pushRepoName" style="width:100%; background:var(--bg); border:1px solid var(--border); color:var(--text); padding:8px; border-radius:4px; box-sizing:border-box;">
+            </div>
+            <div style="margin-bottom:20px;">
+                <label style="display:block; font-size:0.75rem; color:var(--muted); margin-bottom:5px;">Initial Message</label>
+                <input type="text" id="pushMsg" style="width:100%; background:var(--bg); border:1px solid var(--border); color:var(--text); padding:8px; border-radius:4px; box-sizing:border-box;">
+            </div>
+            <div class="repo-actions">
+                <button class="btn" onclick="performPush()" style="flex:1;">Push to Ocean</button>
+                <button class="btn btn-muted" onclick="closeModals()" style="flex:1;">Cancel</button>
+            </div>
+        </div>
     </div>
 
     <!-- Rename Modal -->
@@ -217,9 +231,11 @@
             else localStorage.removeItem('deep_sea_admin_node_addr');
 
             const apiBase = customAddr ? customAddr.replace(/\/$/, '') : '';
+            // Detect if running on a public hostname (not localhost or IP)
             const isStatic = !window.location.port || window.location.hostname.includes('github.io') || window.location.hostname.includes('dev');
             
             try {
+                // For ADMIN primary key, we allow bypass on public static mirrors if no custom node is set.
                 if (isStatic && !customAddr) {
                     if (keyId === 'ds_key_ed5b7f253140') {
                         session = { key: keyId, secret: secret };
@@ -263,9 +279,7 @@
             const status = document.getElementById('status'); status.innerText = "Diving into the currents...";
             const savedAddr = localStorage.getItem('deep_sea_admin_node_addr');
             const apiBase = savedAddr ? savedAddr.replace(/\/$/, '') : '';
-            
-            // If on static mirror without local node, try to load from ocean.json
-            const isStatic = window.location.hostname.includes('github.io') || window.location.hostname.includes('dev');
+            const isStatic = !window.location.port || window.location.hostname.includes('github.io') || window.location.hostname.includes('dev');
             
             try {
                 let resp;
@@ -343,8 +357,9 @@
             if (!msg) return alert("Describe changes.");
             if (currentActiveFile) currentRepoFiles[currentActiveFile] = utob(document.getElementById('editorArea').value);
             
-            // Admin push uses the internal /api/push (direct filesystem access)
-            const resp = await fetch('/api/push', {
+            const savedAddr = localStorage.getItem('deep_sea_admin_node_addr');
+            const apiBase = savedAddr ? savedAddr.replace(/\/$/, '') : '';
+            const resp = await fetch(apiBase + '/api/push', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ path: currentEditingRepo, message: msg })
@@ -363,7 +378,9 @@
         async function performRename() {
             const old_name = document.getElementById('oldName').value;
             const new_name = document.getElementById('newName').value;
-            const resp = await fetch('/api/gateway/rename', {
+            const savedAddr = localStorage.getItem('deep_sea_admin_node_addr');
+            const apiBase = savedAddr ? savedAddr.replace(/\/$/, '') : '';
+            const resp = await fetch(apiBase + '/api/gateway/rename', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-DeepSea-Key': 'ADMIN' },
                 body: JSON.stringify({ old_name, new_name })
@@ -372,8 +389,10 @@
         }
 
         async function deleteRepo(name) {
-            if (!confirm(`Are you sure you want to remove ${name} from your local index? (Files will remain on Usenet)`)) return;
-            const resp = await fetch('/api/gateway/delete', {
+            if (!confirm(`Are you sure?`)) return;
+            const savedAddr = localStorage.getItem('deep_sea_admin_node_addr');
+            const apiBase = savedAddr ? savedAddr.replace(/\/$/, '') : '';
+            const resp = await fetch(apiBase + '/api/gateway/delete', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-DeepSea-Key': 'ADMIN' },
                 body: JSON.stringify({ repo: name })
@@ -384,7 +403,9 @@
         async function performPush() {
             const name = document.getElementById('pushRepoName').value;
             const msg = document.getElementById('pushMsg').value;
-            const resp = await fetch('/api/push', {
+            const savedAddr = localStorage.getItem('deep_sea_admin_node_addr');
+            const apiBase = savedAddr ? savedAddr.replace(/\/$/, '') : '';
+            const resp = await fetch(apiBase + '/api/push', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ path: name, message: msg })
